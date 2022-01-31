@@ -279,6 +279,7 @@ _dbt_fzf_show_selectors() {
 
 # This is the actual function called to launch fzf when you type **<tab>
 _fzf_complete_dbt() {
+    local height=${FZF_DBT_HEIGHT-80%}
     _fzf_complete \
         --multi \
         --reverse \
@@ -288,6 +289,7 @@ _fzf_complete_dbt() {
         --bind=".:reload( source $FZF_DBT_PATH; _dbt_fzf_show_selectors )" \
         --header-lines=1 \
         --preview "source $FZF_DBT_PATH;  _dbt_fzf_preview {}" \
+        --height $height \
         -- "$@" \
         < <( _dbt_fzf_show_models )
 }
