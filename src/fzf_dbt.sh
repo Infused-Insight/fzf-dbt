@@ -2,22 +2,6 @@
 
 FZF_DBT_PATH=$0
 
-# A jq filter that simplifies the dbt manifest json and only keeps
-# the keys we need.
-JQ_DBT_MODEL_FILTER='
-    .nodes |
-    to_entries |
-    map({
-        model: .value.name,
-        resource_type: .value.resource_type,
-        file_path: (.value.root_path + "/" + .value.original_file_path),
-        package_path: (.value.fqn[:-1] | join(".") ), tags: .value.tags
-    }) |
-    .[] |
-    select(.resource_type == "model")
-'
-
-
 # Walk up the filesystem until we find a dbt_project.yml file,
 # then return the path which contains it (if found).
 # Taken from the _dbt zsh completion script:
@@ -32,6 +16,28 @@ _dbt_fzf_get_project_root() {
   done
 }
 
+# Return a jq filter that simplifies the dbt manifest json and only keeps
+# the keys we need.
+_dbt_fzf_jq_dbt_model_filter() {
+    local project_dir=$(_dbt_fzf_get_project_root)
+    if [ -z "$project_dir" ]
+    then
+        return
+    fi
+
+    echo "
+        .nodes |
+        to_entries |
+        map({
+            model: .value.name,
+            resource_type: .value.resource_type,
+            file_path: (\"${project_dir}/\" + .value.original_file_path),
+            package_path: (.value.fqn[:-1] | join(\".\") ), tags: .value.tags
+        }) |
+        .[] |
+        select(.resource_type == \"model\")
+    "
+}
 
 # Prints path of the dbt manifest.json
 _dbt_fzf_get_manifest_path() {
@@ -55,7 +61,15 @@ _dbt_fzf_get_model_list() {
         return
     fi
 
-    jq -r "$JQ_DBT_MODEL_FILTER | .model" $manifest_path | sort
+    local jq_filter=$(_dbt_fzf_jq_dbt_model_filter)
+
+    if [ -z "$jq_filter" ]
+    then
+        echo "Unable to set jq filter"
+        return
+    fi
+
+    jq -r "$jq_filter | .model" $manifest_path | sort
 }
 
 # Prints a list of all dbt tags
@@ -68,7 +82,15 @@ _dbt_fzf_get_tag_list() {
         return
     fi
 
-    jq -r "$JQ_DBT_MODEL_FILTER | (\"tag:\" + .tags[])" $manifest_path \
+    local jq_filter=$(_dbt_fzf_jq_dbt_model_filter)
+
+    if [ -z "$jq_filter" ]
+    then
+        echo "Unable to set jq filter"
+        return
+    fi
+
+    jq -r "$jq_filter | (\"tag:\" + .tags[])" $manifest_path \
     | sort | uniq
 }
 
@@ -82,8 +104,16 @@ _dbt_fzf_get_package_paths() {
         return
     fi
 
+    local jq_filter=$(_dbt_fzf_jq_dbt_model_filter)
+
+    if [ -z "$jq_filter" ]
+    then
+        echo "Unable to set jq filter"
+        return
+    fi
+
     local package_list=$(
-        jq -r "$JQ_DBT_MODEL_FILTER | .package_path" $manifest_path \
+        jq -r "$jq_filter | .package_path" $manifest_path \
         | sort | uniq
     )
 
@@ -123,11 +153,18 @@ _dbt_fzf_get_path_for_model() {
         return
     fi
 
+    local jq_filter=$(_dbt_fzf_jq_dbt_model_filter)
+
+    if [ -z "$jq_filter" ]
+    then
+        echo "Unable to set jq filter"
+        return
+    fi
 
     local model_path=$(
         jq \
             "
-                $JQ_DBT_MODEL_FILTER | 
+                $jq_filter | 
                 select(.model == \"$model_name\") |
                 .file_path
             " \
@@ -160,10 +197,18 @@ _dbt_fzf_get_models_for_tag() {
         return
     fi
 
+    local jq_filter=$(_dbt_fzf_jq_dbt_model_filter)
+
+    if [ -z "$jq_filter" ]
+    then
+        echo "Unable to set jq filter"
+        return
+    fi
+
     jq \
         -r \
         "
-            $JQ_DBT_MODEL_FILTER |
+            $jq_filter |
             select(.tags[] | contains (\"$tag_name\")) |
             .model
         " \
@@ -189,10 +234,18 @@ _dbt_fzf_get_models_for_package_path() {
         return
     fi
 
+    local jq_filter=$(_dbt_fzf_jq_dbt_model_filter)
+
+    if [ -z "$jq_filter" ]
+    then
+        echo "Unable to set jq filter"
+        return
+    fi
+
     jq \
         -r \
         "
-            $JQ_DBT_MODEL_FILTER |
+            $jq_filter |
             select(.package_path|startswith(\"$package_path\")) |
             .model
         " \
